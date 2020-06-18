@@ -7,7 +7,7 @@ import threading
 import os, io
 
 import parkNumPackage.firebase
-from parkNumPackage import firebase
+from ParkNum.parkNumPackage import firebase
 
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "C:/VisionAPI/sehoon.json"
 
@@ -15,7 +15,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 options = {
     'model': 'C:\\HC\\darkflow\\cfg\\parking-yolo-obj.cfg',
-    'load': 'C:\\HC\\darkflow\\bin\\parking20_04_03_8000.weights',
+    'load': 'C:\\HC\\darkflow\\bin\\parking20_06_12_2000jpg.weights',
     'threshold': 0.6
 }  # weights파일, cfg파일 설정
 
@@ -52,14 +52,14 @@ def detect_text(num):
     print('Texts:')
 
     for text in texts:
-        print('\n"{}"'.format(text.description))
+        print('\nCropImg로 부터 "{}" 텍스트를 추출 하였습니다.'.format(text.description))
         vertices = (['({},{})'.format(vertex.x, vertex.y)
                      for vertex in text.bounding_poly.vertices])
 
-        print('bounds: {}'.format(','.join(vertices)))
+        # print('bounds: {}'.format(','.join(vertices)))
         vstr = vstr + str(text.description) + "\n"
     try:
-        fw.writelines(vstr.split("\n")[0] + "\n" + vstr.split("\n")[1])
+        fw.writelines(vstr.split("\n")[0] + "\t" + vstr.split("\n")[1])
         fw.close()
     except IndexError:
         fw.write("parknum is not found")
@@ -82,19 +82,11 @@ def find_recent_video():
 
     return check_video_path
 
-def count_file_in_folder():
-    files_path = "C:\\HC\\afterCrop\\"
-    file_list = []
-    for f_name in os.listdir(f"{files_path}"):
-        file_list.append(f_name)
-
-    return len(file_list)
-
 
 def cropTextImg(index):
     # read 는 cv2함수 open pil함수
-    img = cv2.imread("C:\\HC\\imgList\\" + "Parking_" + str(index) + ".jpg", cv2.IMREAD_UNCHANGED)
-    # img = cv2.imread("C:\\HC\\imgList\\" + "Parking_" + str(index) + ".jpg", cv2.IMREAD_GRAYSCALE)
+    img = cv2.imread("C:\\HC\\imgList\\" + "CarLocationImg_" + str(index) + ".jpg", cv2.IMREAD_UNCHANGED)
+    # img = cv2.imread("C:\\HC\\imgList\\" + "test_" + str(index) + ".jpg", cv2.IMREAD_GRAYSCALE)
     # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     result = tfnet.return_predict(img)
     if result == list():
@@ -112,17 +104,17 @@ def cropTextImg(index):
         bottomRightX = result[0]['bottomright']['x']
         bottomRightY = result[0]['bottomright']['y']
 
-        if (topleftX - 50) > 0:
-            topleftX = topleftX - 50
+        if (topleftX - 40) > 0:
+            topleftX = topleftX - 40
 
-        if (bottomRightX + 50) < imgWidth:
-            bottomRightX = bottomRightX + 50
+        if (bottomRightX + 40) < imgWidth:
+            bottomRightX = bottomRightX + 40
 
-        if (topleftY - 50) > 0:
-            topleftY = topleftY - 50
+        if (topleftY - 40) > 0:
+            topleftY = topleftY - 40
 
-        if (bottomRightY + 50) < imgHeight:
-            bottomRightY = bottomRightY + 50
+        if (bottomRightY + 40) < imgHeight:
+            bottomRightY = bottomRightY + 40
 
         cropImg = img[int(topleftY):int(bottomRightY), int(topleftX):int(bottomRightX)]
         # cropImg = img[0:100, 300:400]
@@ -138,9 +130,12 @@ def cropTextImg(index):
 
 
 def reversePlay(capture):
+    global timer_end_flag
     global find_parknum_flag
     listNumber = 1
     captureCount = 1
+    frameController = 0
+    frameDelay = 0
 
     # check for camera openning
     if capture.isOpened() is False:
@@ -148,7 +143,20 @@ def reversePlay(capture):
 
     # Get the total number of frames
     frame_idx = capture.get(cv2.CAP_PROP_FRAME_COUNT) - 1
-    print("Starting Frame: '{}'".format(frame_idx))
+    before_frame_idx = frame_idx
+    Out_In_decision()
+    # 시작 프레임을 출력하는 메소드
+    # print("Starting Frame: '{}'".format(frame_idx))
+    if frame_idx > 5000:
+        frameController = 30
+        frameDelay = frameController * 10
+    elif frame_idx > 1500:
+        frameController = 30
+        frameDelay = frameController * 8
+    else :
+        frameController = 30
+        frameDelay = frameController * 4
+
 
     # Read until video is finished:
     while capture.isOpened() and frame_idx >= 0:
@@ -163,26 +171,46 @@ def reversePlay(capture):
             # 동영상 시작될때 이름?
             cv2.imshow('Frame in Reverse', frame)
 
-            # 내가 추가 할 부분
             results = tfnet.return_predict(frame)
-            for result in results:
-                if result['label'] == 'parknum':
-                    cv2.imwrite("C:\\HC\\imgList\\" + "Parking_" + str(listNumber) + ".jpg", frame)
-                    captureCount += 1
-                    listNumber += 1
-                    print("찰칵스")
-                    find_parknum_flag = True
 
-            # 사진을 3개저장하면종료.
-            if captureCount > 3:
-                return captureCount;
-                break;
+            if before_frame_idx > frame_idx:
+                if len(results) > 0:
+                    if results[0]['label'] == 'parknum':
+                        cv2.imwrite("C:\\HC\\imgList\\" + "CarLocationImg_" + str(listNumber) + ".jpg", frame)
+                        captureCount += 1
+                        listNumber += 1
+                        # 420프레임동안은 같은 사진을 찍지 않겠다.
+                        before_frame_idx -= frameDelay
+                        print("주차 위치로 부터 기둥 사진을 저장 했습니다.")
+                        if not find_parknum_flag:
+                            find_parknum_flag = True
+
+                    # 사진을 3개저장하면종료.
+                    if captureCount > 3:
+                        timer_end_flag = True
+                        return captureCount
+                        break
+                # for result in results:
+                #     if result['label'] == 'parknum':
+                #         cv2.imwrite("C:\\HC\\imgList\\" + "cropImg_" + str(listNumber) + ".jpg", frame)
+                #         captureCount += 1
+                #         listNumber += 1
+                #         # 100프레임동안은 같은 사진을 찍지 않겠다.
+                #         before_frame_idx -= 100
+                #         print("주차 위치로 부터 기둥 사진을 저장 했습니다.")
+                #         find_parknum_flag = True
+                #
+                #     # 사진을 3개저장하면종료.
+                #     if captureCount > 3:
+                #         return captureCount
+                #         break
 
             # 프레임을 뒤로 감소시키며 거꾸로 재생
-            print("Next index: '{}'".format(frame_idx))
-            frame_idx = frame_idx - 5
+            # print("Next index: '{}'".format(frame_idx))
+            # print("beform_frame index: '{}'".format(before_frame_idx))
+            frame_idx = frame_idx - frameController
 
-            if count > 5:
+            if count > 10 and (find_parknum_flag == False):
                 capture.release()
                 return 0
 
@@ -196,15 +224,20 @@ def reversePlay(capture):
 
 def Out_In_decision():
     global count
+    global timer_end_flag
+    global find_parknum_flag
     timer = threading.Timer(1, Out_In_decision)
     timer.start()
 
     count += 1
-    print("흐른 시간초 : " + str(count))
-    if find_parknum_flag == True:
+    # print("경과 시간 : " + str(count))
+    # if find_parknum_flag == True:
+    #     timer.cancel()
+    if timer_end_flag:
         timer.cancel()
+        timer_end_flag = False
 
-    if count > 5:
+    if count > 10 and (find_parknum_flag == False):
         timer.cancel()
         sleep(1)
         reversePlay_OnlyCapture()
@@ -222,7 +255,19 @@ def reversePlay_OnlyCapture():
 
     # Get the total number of frames
     frame_idx = capture.get(cv2.CAP_PROP_FRAME_COUNT) - 1
-    print("Starting Frame: '{}'".format(frame_idx))
+
+    if frame_idx > 5000:
+        frameController = 30
+        frameDelay = frameController * 10
+    elif frame_idx > 1500:
+        frameController = 30
+        frameDelay = frameController * 8
+    else :
+        frameController = 30
+        frameDelay = frameController * 4
+
+    # 시작 프레임을 콘솔창에 찍어주는 메소드
+    # print("Starting Frame: '{}'".format(frame_idx))
 
     # Read until video is finished:
     while capture.isOpened() and frame_idx >= 0:
@@ -237,20 +282,17 @@ def reversePlay_OnlyCapture():
 
             # cv2.imshow('Frame in Reverse', frame)
 
-            cv2.imwrite("C:\\HC\\imgList\\" + "Parking_" + str(listNumber) + ".jpg", frame)
-            fw = open('C:\\HC\\afterCrop\\ocr' + str(listNumber) + '.text', 'w', -1, "utf-8")
-            fw.write("parknum is not found")
+            cv2.imwrite("C:\\HC\\imgList\\" + "parkImg_" + str(listNumber) + ".jpg", frame)
             captureCount += 1
             listNumber += 1
 
             # 사진을 3개저장하면종료.
             if captureCount > 3:
-                fw.close()
-                break;
+                break
 
             # 프레임을 뒤로 감소시키며 거꾸로 재생
             print("Next index: '{}'".format(frame_idx))
-            frame_idx = frame_idx - 50
+            frame_idx = frame_idx - frameController - 30
 
             # Q를 누르면 꺼짐
             if cv2.waitKey(30) & 0xFF == ord('q'):
@@ -259,7 +301,8 @@ def reversePlay_OnlyCapture():
         else:
             break
 
-def remove_Forder() :
+
+def remove_Forder():
     afterCrop_folder_path = "C:\\HC\\afterCrop\\"
     imgList_folder_path = "C:\\HC\\imgList\\"
 
@@ -274,6 +317,7 @@ def remove_Forder() :
 # capture = cv2.VideoCapture('C:\\HC\\videoList\\road1.mp4')
 tfnet = TFNet(options)
 
+timer_end_flag = False
 find_parknum_flag = False
 saveCount = 0
 count = 0
@@ -282,7 +326,6 @@ count = 0
 def Main():
     remove_Forder()
     capture = cv2.VideoCapture(find_recent_video())
-    Out_In_decision()
     saveCount = reversePlay(capture)
     for i in range(1, saveCount):
         try:
@@ -293,15 +336,6 @@ def Main():
 
     capture.release()
     cv2.destroyAllWindows()
-    # while(True):
-    #     afterCrop_folder_path = "C:\\HC\\afterCrop\\"
-    #     if(len(os.walk(afterCrop_folder_path).next()[2]) >=3) :
-    #         break;
-    afterCrop_folder_path = "C:\\HC\\afterCrop\\"
-    while True:
-        if count_file_in_folder() >= 1:
-            break
-
     firebase.main()
 
 
