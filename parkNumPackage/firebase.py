@@ -42,8 +42,9 @@ def main():
     firebase = pyrebase.initialize_app(config)
     db = firebase.database()
 
-    db.child("name").child("-M7qEiKlHjou_PAqcwnt").update({"parknum":ocr_txt})
-    print("success update firebase")
+    db.child("name").child("-M9m61HQdmKX694wJKnF").update({"parknum":ocr_txt})
+    # db.child("name").child("-M7qEiKlHjou_PAqcwnt").update({"parknum":ocr_txt})
+    print("FireBase에 텍스트를 Update 했습니다.")
     #db.child("name").remove()
     #db = firestore.client()
     bucket = storage.bucket()
@@ -51,9 +52,9 @@ def main():
     for i in range(0,3):
         blobs.append(bucket.blob('Parking{}'.format(i+1)))
     for i in range(0,3):
-        outfile = 'C:\\HC\\imgList\\Parking_{}.jpg'.format(i+1).replace('\u202a',"")
+        outfile = 'C:\\HC\\imgList\\CarLocationImg_{}.jpg'.format(i+1).replace('\u202a',"")
         with open(outfile,'rb') as my_file:
             blobs[i].upload_from_file(my_file)
-        print("success update storage")
+    print("FireBase storage에 이미지 파일을 저장했습니다.")
 
 # main()
